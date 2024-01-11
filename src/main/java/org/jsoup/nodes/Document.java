@@ -338,6 +338,15 @@ public class Document extends Element {
         clone.outputSettings = this.outputSettings.clone();
         return clone;
     }
+
+    @Override
+    public Document shallowClone() {
+        Document clone = new Document(baseUri());
+        if (attributes != null)
+            clone.attributes = attributes.clone();
+        clone.outputSettings = this.outputSettings.clone();
+        return clone;
+    }
     
     /**
      * Ensures a meta charset (html) or xml declaration (xml) with the current
@@ -412,6 +421,7 @@ public class Document extends Element {
         private boolean prettyPrint = true;
         private boolean outline = false;
         private int indentAmount = 1;
+        private int maxPaddingWidth = 30;
         private Syntax syntax = Syntax.html;
 
         public OutputSettings() {}
@@ -560,6 +570,27 @@ public class Document extends Element {
             return this;
         }
 
+        /**
+         * Get the current max padding amount, used when pretty printing
+         * so very deeply nested nodes don't get insane padding amounts.
+         * @return the current indent amount
+         */
+        public int maxPaddingWidth() {
+            return maxPaddingWidth;
+        }
+
+        /**
+         * Set the max padding amount for pretty printing so very deeply nested nodes don't get insane padding amounts.
+         * @param maxPaddingWidth number of spaces to use for indenting each level of nested nodes. Must be {@literal >=} -1.
+         *        Default is 30 and -1 means unlimited.
+         * @return this, for chaining
+         */
+        public OutputSettings maxPaddingWidth(int maxPaddingWidth) {
+            Validate.isTrue(maxPaddingWidth >= -1);
+            this.maxPaddingWidth = maxPaddingWidth;
+            return this;
+        }
+
         @Override
         public OutputSettings clone() {
             OutputSettings clone;
@@ -570,7 +601,7 @@ public class Document extends Element {
             }
             clone.charset(charset.name()); // new charset and charset encoder
             clone.escapeMode = Entities.EscapeMode.valueOf(escapeMode.name());
-            // indentAmount, prettyPrint are primitives so object.clone() will handle
+            // indentAmount, maxPaddingWidth, and prettyPrint are primitives so object.clone() will handle
             return clone;
         }
     }

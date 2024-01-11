@@ -16,7 +16,7 @@ Build-Depends:
  libmaven-bundle-plugin-java,
  libmaven-javadoc-plugin-java,
  maven-debian-helper (>= 1.4)
-Standards-Version: 4.6.0
+Standards-Version: 4.6.1
 Vcs-Git: https://salsa.debian.org/java-team/jsoup.git
 Vcs-Browser: https://salsa.debian.org/java-team/jsoup
 Homepage: https://jsoup.org

@@ -1,1 +1,10 @@
-.pc/
+.idea/
+jsoup.iml
+jsoup.ipr
+jsoup.iws
+target/
+.classpath
+.project
+.settings/
+*Thrash*
+bin/

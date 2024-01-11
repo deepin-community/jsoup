@@ -4,7 +4,10 @@ import org.jsoup.Jsoup;
 import org.jsoup.MultiLocaleExtension.MultiLocaleTest;
 import org.jsoup.TextUtil;
 import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
 import org.jsoup.nodes.Entities;
+import org.jsoup.nodes.Range;
+import org.jsoup.parser.Parser;
 import org.junit.jupiter.api.Test;
 
 import java.util.Locale;
@@ -195,13 +198,13 @@ public class CleanerTest {
     @Test public void resolvesRelativeLinks() {
         String html = "<a href='/foo'>Link</a><img src='/bar'>";
         String clean = Jsoup.clean(html, "http://example.com/", Safelist.basicWithImages());
-        assertEquals("<a href=\"http://example.com/foo\" rel=\"nofollow\">Link</a>\n<img src=\"http://example.com/bar\">", clean);
+        assertEquals("<a href=\"http://example.com/foo\" rel=\"nofollow\">Link</a><img src=\"http://example.com/bar\">", clean);
     }
 
     @Test public void preservesRelativeLinksIfConfigured() {
         String html = "<a href='/foo'>Link</a><img src='/bar'> <img src='javascript:alert()'>";
         String clean = Jsoup.clean(html, "http://example.com/", Safelist.basicWithImages().preserveRelativeLinks(true));
-        assertEquals("<a href=\"/foo\" rel=\"nofollow\">Link</a>\n<img src=\"/bar\"> \n<img>", clean);
+        assertEquals("<a href=\"/foo\" rel=\"nofollow\">Link</a><img src=\"/bar\"> <img>", clean);
     }
 
     @Test public void dropsUnresolvableRelativeLinks() {
@@ -210,13 +213,31 @@ public class CleanerTest {
         assertEquals("<a rel=\"nofollow\">Link</a>", clean);
     }
 
+    @Test void dropsConcealedJavascriptProtocolWhenRelativesLinksEnabled() {
+        Safelist safelist = Safelist.basic().preserveRelativeLinks(true);
+        String html = "<a href=\"&#0013;ja&Tab;va&Tab;script&#0010;:alert(1)\">Link</a>";
+        String clean = Jsoup.clean(html, "https://", safelist);
+        assertEquals("<a rel=\"nofollow\">Link</a>", clean);
+
+        String colon = "<a href=\"ja&Tab;va&Tab;script&colon;alert(1)\">Link</a>";
+        String cleanColon = Jsoup.clean(colon, "https://", safelist);
+        assertEquals("<a rel=\"nofollow\">Link</a>", cleanColon);
+    }
+
+    @Test void dropsConcealedJavascriptProtocolWhenRelativesLinksDisabled() {
+        Safelist safelist = Safelist.basic().preserveRelativeLinks(false);
+        String html = "<a href=\"ja&Tab;vas&#0013;cript:alert(1)\">Link</a>";
+        String clean = Jsoup.clean(html, "https://", safelist);
+        assertEquals("<a rel=\"nofollow\">Link</a>", clean);
+    }
+
     @Test public void handlesCustomProtocols() {
         String html = "<img src='cid:12345' /> <img src='data:gzzt' />";
         String dropped = Jsoup.clean(html, Safelist.basicWithImages());
-        assertEquals("<img> \n<img>", dropped);
+        assertEquals("<img> <img>", dropped);
 
         String preserved = Jsoup.clean(html, Safelist.basicWithImages().addProtocols("img", "src", "cid", "data"));
-        assertEquals("<img src=\"cid:12345\"> \n<img src=\"data:gzzt\">", preserved);
+        assertEquals("<img src=\"cid:12345\"> <img src=\"data:gzzt\">", preserved);
     }
 
     @Test public void handlesAllPseudoTag() {
@@ -333,10 +354,23 @@ public class CleanerTest {
         Document orig = Jsoup.parse("<p>test<br></p>");
         orig.outputSettings().syntax(Document.OutputSettings.Syntax.xml);
         orig.outputSettings().escapeMode(Entities.EscapeMode.xhtml);
-        Safelist whitelist = Safelist.none().addTags("p", "br");
+        Safelist safelist = Safelist.none().addTags("p", "br");
 
-        Document result = new Cleaner(whitelist).clean(orig);
+        Document result = new Cleaner(safelist).clean(orig);
         assertEquals(Document.OutputSettings.Syntax.xml, result.outputSettings().syntax());
         assertEquals("<p>test<br /></p>", result.body().html());
+    }
+
+    @Test void preservesSourcePositionViaUserData() {
+        Document orig = Jsoup.parse("<script>xss</script>\n <p>Hello</p>", Parser.htmlParser().setTrackPosition(true));
+        Element p = orig.expectFirst("p");
+        Range origRange = p.sourceRange();
+        assertEquals("2,2:22-2,5:25", origRange.toString());
+
+        Document clean = new Cleaner(Safelist.relaxed()).clean(orig);
+        Element cleanP = clean.expectFirst("p");
+        Range cleanRange = cleanP.sourceRange();
+        assertEquals(cleanRange, origRange);
+        assertEquals(clean.endSourceRange(), orig.endSourceRange());
     }
 }

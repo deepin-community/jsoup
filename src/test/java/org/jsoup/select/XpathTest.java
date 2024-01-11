@@ -1,7 +1,6 @@
 package org.jsoup.select;
 
 import org.jsoup.Jsoup;
-import org.jsoup.nodes.Attribute;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.nodes.Node;
@@ -17,7 +16,6 @@ import javax.xml.xpath.XPathFactory;
 import javax.xml.xpath.XPathFactoryConfigurationException;
 import javax.xml.xpath.XPathFunctionResolver;
 import javax.xml.xpath.XPathVariableResolver;
-
 import java.util.List;
 import java.util.stream.Stream;
 
@@ -43,13 +41,15 @@ public class XpathTest {
 
         Element div = doc.selectFirst("div");
         assertNotNull(div);
+        Element w3cDiv = div.selectXpath(".").first(); // self
+        assertSame(div, w3cDiv);
 
-        Elements els = div.selectXpath("/div/p");
+        Elements els = div.selectXpath("p");
         assertEquals(1, els.size());
         assertEquals("One", els.get(0).text());
         assertEquals("p", els.get(0).tagName());
 
-        assertEquals(0, div.selectXpath("//body").size());
+        assertEquals(1, div.selectXpath("//body").size()); // the whole document is visible on the div context
         assertEquals(1, doc.selectXpath("//body").size());
     }
 
@@ -74,8 +74,8 @@ public class XpathTest {
     }
 
     @Test
-    public void supportsNamespaces() {
-        String xhtml = "<html xmlns='http://www.w3.org/1999/xhtml'><body id='One'><div>hello</div></body></html>";;
+    public void supportsLocalname() {
+        String xhtml = "<html xmlns='http://www.w3.org/1999/xhtml'><body id='One'><div>hello</div></body></html>";
         Document doc = Jsoup.parse(xhtml, Parser.xmlParser());
         Elements elements = doc.selectXpath("//*[local-name()='body']");
         assertEquals(1, elements.size());
@@ -84,7 +84,7 @@ public class XpathTest {
 
     @Test
     public void canDitchNamespaces() {
-        String xhtml = "<html xmlns='http://www.w3.org/1999/xhtml'><body id='One'><div>hello</div></body></html>";;
+        String xhtml = "<html xmlns='http://www.w3.org/1999/xhtml'><body id='One'><div>hello</div></body></html>";
         Document doc = Jsoup.parse(xhtml, Parser.xmlParser());
         doc.select("[xmlns]").removeAttr("xmlns");
         Elements elements = doc.selectXpath("//*[local-name()='body']");
@@ -146,6 +146,31 @@ public class XpathTest {
         assertEquals("/bar", hrefs.get(1));
     }
 
+    @Test void selectOutsideOfElementTree() {
+        Document doc = Jsoup.parse("<p>One<p>Two<p>Three");
+        Elements ps = doc.selectXpath("//p");
+        assertEquals(3, ps.size());
+
+        Element p1 = ps.get(0);
+        assertEquals("One", p1.text());
+
+        Elements sibs = p1.selectXpath("following-sibling::p");
+        assertEquals(2, sibs.size());
+        assertEquals("Two", sibs.get(0).text());
+        assertEquals("Three", sibs.get(1).text());
+    }
+
+    @Test void selectAncestorsOnContextElement() {
+        // https://github.com/jhy/jsoup/issues/1652
+        Document doc = Jsoup.parse("<div><p>Hello");
+        Element p = doc.selectFirst("p");
+        assertNotNull(p);
+        Elements chain = p.selectXpath("ancestor-or-self::*");
+        assertEquals(4, chain.size());
+        assertEquals("html", chain.get(0).tagName());
+        assertEquals("p", chain.get(3).tagName());
+    }
+
     @Test
     public void canSupplyAlternateFactoryImpl() {
         // previously we had a test to load Saxon and do an XPath 2.0 query. But we know Saxon works and so that's
@@ -165,8 +190,45 @@ public class XpathTest {
         }
         assertTrue(threw);
         System.clearProperty(XPathFactoryProperty);
+    }
 
+    @Test
+    public void notNamespaceAware() {
+        String xhtml = "<html xmlns='http://www.w3.org/1999/xhtml'><body id='One'><div>hello</div></body></html>";
+        Document doc = Jsoup.parse(xhtml, Parser.xmlParser());
+        Elements elements = doc.selectXpath("//body");
+        assertEquals(1, elements.size());
+        assertEquals("One", elements.first().id());
+    }
 
+    @Test
+    public void supportsPrefixes() {
+        // example from https://www.w3.org/TR/xml-names/
+        String xml = "<?xml version=\"1.0\"?>\n" +
+            "<bk:book xmlns:bk='urn:loc.gov:books'\n" +
+            "         xmlns:isbn='urn:ISBN:0-395-36341-6'>\n" +
+            "    <bk:title>Cheaper by the Dozen</bk:title>\n" +
+            "    <isbn:number>1568491379</isbn:number>\n" +
+            "</bk:book>";
+        Document doc = Jsoup.parse(xml, Parser.xmlParser());
+
+        //Elements elements = doc.selectXpath("//bk:book/bk:title");
+        Elements elements = doc.selectXpath("//book/title");
+        assertEquals(1, elements.size());
+        assertEquals("Cheaper by the Dozen", elements.first().text());
+
+        // with prefix
+        Elements byPrefix = doc.selectXpath("//*[name()='bk:book']/*[name()='bk:title']");
+        assertEquals(1, byPrefix.size());
+        assertEquals("Cheaper by the Dozen", byPrefix.first().text());
+
+        Elements byLocalName = doc.selectXpath("//*[local-name()='book']/*[local-name()='title']");
+        assertEquals(1, byLocalName.size());
+        assertEquals("Cheaper by the Dozen", byLocalName.first().text());
+
+        Elements isbn = doc.selectXpath("//book/number");
+        assertEquals(1, isbn.size());
+        assertEquals("1568491379", isbn.first().text());
     }
 
     // minimal, no-op implementation class to verify users can load a factory to support XPath 2.0 etc

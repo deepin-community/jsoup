@@ -6,9 +6,10 @@ import org.jsoup.nodes.Document;
 import org.jsoup.parser.Parser;
 import org.jsoup.safety.Cleaner;
 import org.jsoup.safety.Safelist;
-import org.jsoup.safety.Whitelist;
 
 import javax.annotation.Nullable;
+import javax.annotation.WillClose;
+
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
@@ -143,10 +144,27 @@ Connection con3 = session.newRequest();
      @return sane HTML
 
      @throws IOException if the file could not be found, or read, or if the charsetName is invalid.
-     @see #parse(File, String, String)
+     @see #parse(File, String, String) parse(file, charset, baseUri)
      */
     public static Document parse(File file, @Nullable String charsetName) throws IOException {
         return DataUtil.load(file, charsetName, file.getAbsolutePath());
+    }
+
+    /**
+     Parse the contents of a file as HTML. The location of the file is used as the base URI to qualify relative URLs.
+     The charset used to read the file will be determined by the byte-order-mark (BOM), or a {@code <meta charset>} tag,
+     or if neither is present, will be {@code UTF-8}.
+
+     <p>This is the equivalent of calling {@link #parse(File, String) parse(file, null)}</p>
+
+     @param file the file to load HTML from. Supports gzipped files (ending in .z or .gz).
+     @return sane HTML
+     @throws IOException if the file could not be found or read.
+     @see #parse(File, String, String) parse(file, charset, baseUri)
+     @since 1.15.1
+     */
+    public static Document parse(File file) throws IOException {
+        return DataUtil.load(file, null, file.getAbsolutePath());
     }
 
     /**
@@ -169,7 +187,7 @@ Connection con3 = session.newRequest();
      /**
      Read an input stream, and parse it to a Document.
 
-     @param in          input stream to read. Make sure to close it after parsing.
+     @param in          input stream to read. The stream will be closed after reading.
      @param charsetName (optional) character set of file contents. Set to {@code null} to determine from {@code http-equiv} meta tag, if
      present, or fall back to {@code UTF-8} (which is often safe to do).
      @param baseUri     The URL where the HTML was retrieved from, to resolve relative links against.
@@ -177,7 +195,7 @@ Connection con3 = session.newRequest();
 
      @throws IOException if the file could not be found, or read, or if the charsetName is invalid.
      */
-    public static Document parse(InputStream in, @Nullable String charsetName, String baseUri) throws IOException {
+    public static Document parse(@WillClose InputStream in, @Nullable String charsetName, String baseUri) throws IOException {
         return DataUtil.load(in, charsetName, baseUri);
     }
 
@@ -265,15 +283,6 @@ Connection con3 = session.newRequest();
     }
 
     /**
-     Use {@link #clean(String, String, Safelist)} instead.
-     @deprecated as of 1.14.1.
-     */
-    @Deprecated
-    public static String clean(String bodyHtml, String baseUri, Whitelist safelist) {
-        return clean(bodyHtml, baseUri, (Safelist) safelist);
-    }
-
-    /**
      Get safe HTML from untrusted input HTML, by parsing input HTML and filtering it through a safe-list of permitted
      tags and attributes.
 
@@ -289,15 +298,6 @@ Connection con3 = session.newRequest();
      */
     public static String clean(String bodyHtml, Safelist safelist) {
         return clean(bodyHtml, "", safelist);
-    }
-
-    /**
-     Use {@link #clean(String, Safelist)} instead.
-     @deprecated as of 1.14.1.
-     */
-    @Deprecated
-    public static String clean(String bodyHtml, Whitelist safelist) {
-        return clean(bodyHtml, (Safelist) safelist);
     }
 
     /**
@@ -323,15 +323,6 @@ Connection con3 = session.newRequest();
     }
 
     /**
-     Use {@link #clean(String, String, Safelist, Document.OutputSettings)} instead.
-     @deprecated as of 1.14.1.
-     */
-    @Deprecated
-    public static String clean(String bodyHtml, String baseUri, Whitelist safelist, Document.OutputSettings outputSettings) {
-        return clean(bodyHtml, baseUri, (Safelist) safelist, outputSettings);
-    }
-
-    /**
      Test if the input body HTML has only tags and attributes allowed by the Safelist. Useful for form validation.
      <p>The input HTML should still be run through the cleaner to set up enforced attributes, and to tidy the output.
      <p>Assumes the HTML is a body fragment (i.e. will be used in an existing HTML document body.)
@@ -343,14 +334,4 @@ Connection con3 = session.newRequest();
     public static boolean isValid(String bodyHtml, Safelist safelist) {
         return new Cleaner(safelist).isValidBodyHtml(bodyHtml);
     }
-
-    /**
-     Use {@link #isValid(String, Safelist)} instead.
-     @deprecated as of 1.14.1.
-     */
-    @Deprecated
-    public static boolean isValid(String bodyHtml, Whitelist safelist) {
-        return isValid(bodyHtml, (Safelist) safelist);
-    }
-    
 }
