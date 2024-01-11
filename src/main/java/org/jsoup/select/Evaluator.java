@@ -682,6 +682,52 @@ public abstract class Evaluator {
     }
 
     /**
+     * Evaluator for matching Element (and its descendants) wholeText. Neither the input nor the element text is
+     * normalized. <code>:containsWholeText()</code>
+     * @since 1.15.1.
+     */
+    public static final class ContainsWholeText extends Evaluator {
+        private final String searchText;
+
+        public ContainsWholeText(String searchText) {
+            this.searchText = searchText;
+        }
+
+        @Override
+        public boolean matches(Element root, Element element) {
+            return element.wholeText().contains(searchText);
+        }
+
+        @Override
+        public String toString() {
+            return String.format(":containsWholeText(%s)", searchText);
+        }
+    }
+
+    /**
+     * Evaluator for matching Element (but <b>not</b> its descendants) wholeText. Neither the input nor the element text is
+     * normalized. <code>:containsWholeOwnText()</code>
+     * @since 1.15.1.
+     */
+    public static final class ContainsWholeOwnText extends Evaluator {
+        private final String searchText;
+
+        public ContainsWholeOwnText(String searchText) {
+            this.searchText = searchText;
+        }
+
+        @Override
+        public boolean matches(Element root, Element element) {
+            return element.wholeOwnText().contains(searchText);
+        }
+
+        @Override
+        public String toString() {
+            return String.format(":containsWholeOwnText(%s)", searchText);
+        }
+    }
+
+    /**
      * Evaluator for matching Element (and its descendants) data
      */
     public static final class ContainsData extends Evaluator {
@@ -764,6 +810,52 @@ public abstract class Evaluator {
         @Override
         public String toString() {
             return String.format(":matchesOwn(%s)", pattern);
+        }
+    }
+
+    /**
+     * Evaluator for matching Element (and its descendants) whole text with regex.
+     * @since 1.15.1.
+     */
+    public static final class MatchesWholeText extends Evaluator {
+        private final Pattern pattern;
+
+        public MatchesWholeText(Pattern pattern) {
+            this.pattern = pattern;
+        }
+
+        @Override
+        public boolean matches(Element root, Element element) {
+            Matcher m = pattern.matcher(element.wholeText());
+            return m.find();
+        }
+
+        @Override
+        public String toString() {
+            return String.format(":matchesWholeText(%s)", pattern);
+        }
+    }
+
+    /**
+     * Evaluator for matching Element's own whole text with regex.
+     * @since 1.15.1.
+     */
+    public static final class MatchesWholeOwnText extends Evaluator {
+        private final Pattern pattern;
+
+        public MatchesWholeOwnText(Pattern pattern) {
+            this.pattern = pattern;
+        }
+
+        @Override
+        public boolean matches(Element root, Element element) {
+            Matcher m = pattern.matcher(element.wholeOwnText());
+            return m.find();
+        }
+
+        @Override
+        public String toString() {
+            return String.format(":matchesWholeOwnText(%s)", pattern);
         }
     }
 

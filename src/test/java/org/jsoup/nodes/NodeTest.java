@@ -250,6 +250,21 @@ public class NodeTest {
         assertEquals("<div><p><#text></#text></p></div>", accum.toString());
     }
 
+    @Test public void forEachNode() {
+        Document doc = Jsoup.parse("<div><p>Hello</p></div><div>There</div><div id=1>Gone<p></div>");
+        doc.forEachNode(node -> {
+            if (node instanceof TextNode) {
+                TextNode textNode = (TextNode) node;
+                if (textNode.text().equals("There")) {
+                    textNode.text("There Now");
+                    textNode.after("<p>Another");
+                }
+            } else if (node.attr("id").equals("1"))
+                node.remove();
+        });
+        assertEquals("<div><p>Hello</p></div><div>There Now<p>Another</p></div>", TextUtil.stripNewlines(doc.body().html()));
+    }
+
     @Test public void orphanNodeReturnsNullForSiblingElements() {
         Node node = new Element(Tag.valueOf("p"), "");
         Element el = new Element(Tag.valueOf("p"), "");
@@ -331,5 +346,60 @@ public class NodeTest {
         Attributes attributes = new Attributes();
         attributes.put("value", "bar");
         return attributes;
+    }
+
+    @Test void clonedNodesHaveOwnerDocsAndIndependentSettings() {
+        // https://github.com/jhy/jsoup/issues/763
+        Document doc = Jsoup.parse("<div>Text</div><div>Two</div>");
+        doc.outputSettings().prettyPrint(false);
+        Element div = doc.selectFirst("div");
+        assertNotNull(div);
+        TextNode text = (TextNode) div.childNode(0);
+        assertNotNull(text);
+
+        TextNode textClone = text.clone();
+        Document docClone = textClone.ownerDocument();
+        assertNotNull(docClone);
+        assertFalse(docClone.outputSettings().prettyPrint());
+        assertNotSame(doc, docClone);
+
+        doc.outputSettings().prettyPrint(true);
+        assertTrue(doc.outputSettings().prettyPrint());
+        assertFalse(docClone.outputSettings().prettyPrint());
+        assertEquals(1, docClone.childNodes().size()); // check did not get the second div as the owner's children
+        assertEquals(textClone, docClone.childNode(0)); // note not the head or the body -- not normalized
+    }
+
+    @Test
+    void firstAndLastChild() {
+        String html = "<div>One <span>Two</span> <a href></a> Three</div>";
+        Document doc = Jsoup.parse(html);
+        Element div = doc.selectFirst("div");
+        Element a = doc.selectFirst("a");
+        assertNotNull(div);
+        assertNotNull(a);
+
+        // nodes
+        TextNode first = (TextNode) div.firstChild();
+        assertEquals("One ", first.text());
+
+        TextNode last = (TextNode) div.lastChild();
+        assertEquals(" Three", last.text());
+
+        assertNull(a.firstChild());
+        assertNull(a.lastChild());
+
+        // elements
+        Element firstEl = div.firstElementChild();
+        assertEquals("span", firstEl.tagName());
+
+        Element lastEl = div.lastElementChild();
+        assertEquals("a", lastEl.tagName());
+
+        assertNull(a.firstElementChild());
+        assertNull(a.lastElementChild());
+
+        assertNull(firstEl.firstElementChild());
+        assertNull(firstEl.lastElementChild());
     }
 }

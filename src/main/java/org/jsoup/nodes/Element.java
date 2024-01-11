@@ -1,6 +1,7 @@
 package org.jsoup.nodes;
 
 import org.jsoup.helper.ChangeNotifyingArrayList;
+import org.jsoup.helper.Consumer;
 import org.jsoup.helper.Validate;
 import org.jsoup.internal.NonnullByDefault;
 import org.jsoup.internal.StringUtil;
@@ -47,7 +48,7 @@ public class Element extends Node {
     private Tag tag;
     private @Nullable WeakReference<List<Element>> shadowChildrenRef; // points to child elements shadowed from node children
     List<Node> childNodes;
-    private @Nullable Attributes attributes; // field is nullable but all methods for attributes are non null
+    @Nullable Attributes attributes; // field is nullable but all methods for attributes are non-null
 
     /**
      * Create a new, standalone element.
@@ -171,7 +172,7 @@ public class Element extends Node {
      * @see Elements#tagName(String)
      */
     public Element tagName(String tagName) {
-        Validate.notEmpty(tagName, "Tag name must not be empty.");
+        Validate.notEmptyParam(tagName, "tagName");
         tag = Tag.valueOf(tagName, NodeUtils.parser(this).settings()); // maintains the case option of the original parse
         return this;
     }
@@ -440,6 +441,7 @@ public class Element extends Node {
      * <p>Also known as {@code querySelector()} in the Web DOM.</p>
      * @param cssQuery cssQuery a {@link Selector} CSS-like query
      * @return the first matching element, or <b>{@code null}</b> if there is no match.
+     * @see #expectFirst(String)
      */
     public @Nullable Element selectFirst(String cssQuery) {
         return Selector.selectFirst(cssQuery, this);
@@ -451,10 +453,28 @@ public class Element extends Node {
      *
      * @param evaluator an element evaluator
      * @return the first matching element (walking down the tree, starting from this element), or {@code null} if none
-     *     matchn.
+     * match.
      */
     public @Nullable Element selectFirst(Evaluator evaluator) {
         return Collector.findFirst(evaluator, this);
+    }
+
+    /**
+     Just like {@link #selectFirst(String)}, but if there is no match, throws an {@link IllegalArgumentException}. This
+     is useful if you want to simply abort processing on a failed match.
+     @param cssQuery a {@link Selector} CSS-like query
+     @return the first matching element
+     @throws IllegalArgumentException if no match is found
+     @since 1.15.2
+     */
+    public Element expectFirst(String cssQuery) {
+        return (Element) Validate.ensureNotNull(
+            Selector.selectFirst(cssQuery, this),
+            parent() != null ?
+                "No elements matched the query '%s' on element '%s'.":
+                "No elements matched the query '%s' in the document."
+            , cssQuery, this.tagName()
+        );
     }
 
     /**
@@ -508,9 +528,9 @@ public class Element extends Node {
     }
 
     /**
-     <b>Beta:</b> find Elements that match the supplied XPath expression.
-     <p>(This functionality is currently in beta and is subject to change. Feedback on the API is requested and
-     welcomed!)</p>
+     Find Elements that match the supplied XPath expression.
+     <p>Note that for convenience of writing the Xpath expression, namespaces are disabled, and queries can be
+     expressed using the element's local name only.</p>
      <p>By default, XPath 1.0 expressions are supported. If you would to use XPath 2.0 or higher, you can provide an
      alternate XPathFactory implementation:</p>
      <ol>
@@ -530,7 +550,7 @@ public class Element extends Node {
     }
 
     /**
-     <b>Beta:</b> find Nodes that match the supplied XPath expression.
+     Find Nodes that match the supplied XPath expression.
      <p>For example, to select TextNodes under {@code p} elements: </p>
      <pre>List&lt;TextNode&gt; textNodes = doc.selectXpath("//body//p//text()", TextNode.class);</pre>
      <p>Note that in the jsoup DOM, Attribute objects are not Nodes. To directly select attribute values, do something
@@ -962,6 +982,42 @@ public class Element extends Node {
         return 0;
     }
 
+    /**
+     Gets the first child of this Element that is an Element, or {@code null} if there is none.
+     @return the first Element child node, or null.
+     @see #firstChild()
+     @see #lastElementChild()
+     @since 1.15.2
+     */
+    public @Nullable Element firstElementChild() {
+        final int size = childNodeSize();
+        if (size == 0) return null;
+        List<Node> children = ensureChildNodes();
+        for (int i = 0; i < size; i++) {
+            Node node = children.get(i);
+            if (node instanceof Element) return (Element) node;
+        }
+        return null;
+    }
+
+    /**
+     Gets the last child of this Element that is an Element, or @{code null} if there is none.
+     @return the last Element child node, or null.
+     @see #lastChild()
+     @see #firstElementChild()
+     @since 1.15.2
+     */
+    public @Nullable Element lastElementChild() {
+        final int size = childNodeSize();
+        if (size == 0) return null;
+        List<Node> children = ensureChildNodes();
+        for (int i = size -1; i >= 0; i--) {
+            Node node = children.get(i);
+            if (node instanceof Element) return (Element) node;
+        }
+        return null;
+    }
+
     // DOM type methods
 
     /**
@@ -1285,17 +1341,35 @@ public class Element extends Node {
      */
     public String wholeText() {
         final StringBuilder accum = StringUtil.borrowBuilder();
-        NodeTraversor.traverse(new NodeVisitor() {
-            public void head(Node node, int depth) {
-                if (node instanceof TextNode) {
-                    TextNode textNode = (TextNode) node;
-                    accum.append(textNode.getWholeText());
-                }
-            }
+        NodeTraversor.traverse((node, depth) -> appendWholeText(node, accum), this);
+        return StringUtil.releaseBuilder(accum);
+    }
 
-            public void tail(Node node, int depth) {
-            }
-        }, this);
+    private static void appendWholeText(Node node, StringBuilder accum) {
+        if (node instanceof TextNode) {
+            accum.append(((TextNode) node).getWholeText());
+        } else if (node instanceof Element) {
+            appendNewlineIfBr((Element) node, accum);
+        }
+    }
+
+    /**
+     Get the (unencoded) text of this element, <b>not including</b> any child elements, including any newlines and spaces
+     present in the original.
+
+     @return unencoded, un-normalized text that is a direct child of this Element
+     @see #text()
+     @see #wholeText()
+     @see #ownText()
+     @since 1.15.1
+     */
+    public String wholeOwnText() {
+        final StringBuilder accum = StringUtil.borrowBuilder();
+        final int size = childNodeSize();
+        for (int i = 0; i < size; i++) {
+            Node node = childNodes.get(i);
+            appendWholeText(node, accum);
+        }
 
         return StringUtil.releaseBuilder(accum);
     }
@@ -1338,9 +1412,16 @@ public class Element extends Node {
             StringUtil.appendNormalisedWhitespace(accum, text, TextNode.lastCharIsWhitespace(accum));
     }
 
+    /** For normalized text, treat a br element as a space, if there is not already a space. */
     private static void appendWhitespaceIfBr(Element element, StringBuilder accum) {
         if (element.tag.normalName().equals("br") && !TextNode.lastCharIsWhitespace(accum))
             accum.append(" ");
+    }
+
+    /** For WholeText, treat a br element as a newline. */
+    private static void appendNewlineIfBr(Element element, StringBuilder accum) {
+        if (element.tag.normalName().equals("br"))
+            accum.append("\n");
     }
 
     static boolean preserveWhitespace(@Nullable Node node) {
@@ -1593,8 +1674,25 @@ public class Element extends Node {
         return this;
     }
 
+    /**
+     Get the source range (start and end positions) of the end (closing) tag for this Element. Position tracking must be
+     enabled prior to parsing the content.
+     @return the range of the closing tag for this element, if it was explicitly closed in the source. {@code Untracked}
+     otherwise.
+     @see org.jsoup.parser.Parser#setTrackPosition(boolean)
+     @see Node#sourceRange()
+     @since 1.15.2
+     */
+    public Range endSourceRange() {
+        return Range.of(this, false);
+    }
+
+    boolean shouldIndent(final Document.OutputSettings out) {
+        return out.prettyPrint() && isFormatAsBlock(out) && !isInlineable(out);
+    }
+
     void outerHtmlHead(final Appendable accum, int depth, final Document.OutputSettings out) throws IOException {
-        if (out.prettyPrint() && isFormatAsBlock(out) && !isInlineable(out)) {
+        if (shouldIndent(out)) {
             if (accum instanceof StringBuilder) {
                 if (((StringBuilder) accum).length() > 0)
                     indent(accum, depth, out);
@@ -1619,7 +1717,7 @@ public class Element extends Node {
     void outerHtmlTail(Appendable accum, int depth, Document.OutputSettings out) throws IOException {
         if (!(childNodes.isEmpty() && tag.isSelfClosing())) {
             if (out.prettyPrint() && (!childNodes.isEmpty() && (
-                    tag.formatAsBlock() || (out.outline() && (childNodes.size()>1 || (childNodes.size()==1 && !(childNodes.get(0) instanceof TextNode))))
+                    tag.formatAsBlock() || (out.outline() && (childNodes.size()>1 || (childNodes.size()==1 && (childNodes.get(0) instanceof Element))))
             )))
                 indent(accum, depth, out);
             accum.append("</").append(tagName()).append('>');
@@ -1705,7 +1803,28 @@ public class Element extends Node {
 
     @Override
     public Element traverse(NodeVisitor nodeVisitor) {
-        return  (Element) super.traverse(nodeVisitor);
+        return (Element) super.traverse(nodeVisitor);
+    }
+
+    @Override
+    public Element forEachNode(Consumer<? super Node> action) {
+        return (Element) super.forEachNode(action);
+    }
+
+    /**
+     Perform the supplied action on this Element and each of its descendant Elements, during a depth-first traversal.
+     Elements may be inspected, changed, added, replaced, or removed.
+     @param action the function to perform on the element
+     @return this Element, for chaining
+     @see Node#forEachNode(Consumer)
+     */
+    public Element forEach(Consumer<? super Element> action) {
+        Validate.notNull(action);
+        NodeTraversor.traverse((node, depth) -> {
+            if (node instanceof Element)
+                action.accept((Element) node);
+        }, this);
+        return this;
     }
 
     @Override
@@ -1732,7 +1851,6 @@ public class Element extends Node {
 
     private boolean isInlineable(Document.OutputSettings out) {
         return tag().isInline()
-            && !tag().isEmpty()
             && (parent() == null || parent().isBlock())
             && previousSibling() != null
             && !out.outline();

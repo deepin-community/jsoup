@@ -246,7 +246,7 @@ public class HtmlTreeBuilder extends TreeBuilder {
         }
 
         Element el = new Element(tagFor(startTag.name(), settings), null, settings.normalizeAttributes(startTag.attributes));
-        insert(el);
+        insert(el, startTag);
         return el;
     }
 
@@ -257,14 +257,19 @@ public class HtmlTreeBuilder extends TreeBuilder {
     }
 
     void insert(Element el) {
-        insertNode(el);
+        insertNode(el, null);
+        stack.add(el);
+    }
+
+    private void insert(Element el, @Nullable Token token) {
+        insertNode(el, token);
         stack.add(el);
     }
 
     Element insertEmpty(Token.StartTag startTag) {
         Tag tag = tagFor(startTag.name(), settings);
         Element el = new Element(tag, null, settings.normalizeAttributes(startTag.attributes));
-        insertNode(el);
+        insertNode(el, startTag);
         if (startTag.isSelfClosing()) {
             if (tag.isKnownTag()) {
                 if (!tag.isEmpty())
@@ -285,7 +290,7 @@ public class HtmlTreeBuilder extends TreeBuilder {
         } else
             setFormElement(el);
 
-        insertNode(el);
+        insertNode(el, startTag);
         if (onStack)
             stack.add(el);
         return el;
@@ -293,7 +298,7 @@ public class HtmlTreeBuilder extends TreeBuilder {
 
     void insert(Token.Comment commentToken) {
         Comment comment = new Comment(commentToken.getData());
-        insertNode(comment);
+        insertNode(comment, commentToken);
     }
 
     void insert(Token.Character characterToken) {
@@ -309,9 +314,10 @@ public class HtmlTreeBuilder extends TreeBuilder {
         else
             node = new TextNode(data);
         el.appendChild(node); // doesn't use insertNode, because we don't foster these; and will always have a stack.
+        onNodeInserted(node, characterToken);
     }
 
-    private void insertNode(Node node) {
+    private void insertNode(Node node, @Nullable Token token) {
         // if the stack hasn't been set up yet, elements (doctype, comments) go into the doc
         if (stack.isEmpty())
             doc.appendChild(node);
@@ -325,6 +331,7 @@ public class HtmlTreeBuilder extends TreeBuilder {
             if (formElement != null)
                 formElement.addElement((Element) node);
         }
+        onNodeInserted(node, token);
     }
 
     Element pop() {
@@ -390,8 +397,11 @@ public class HtmlTreeBuilder extends TreeBuilder {
         for (int pos = stack.size() -1; pos >= 0; pos--) {
             Element el = stack.get(pos);
             stack.remove(pos);
-            if (el.normalName().equals(elName))
+            if (el.normalName().equals(elName)) {
+                if (currentToken instanceof Token.EndTag)
+                    onNodeClosed(el, currentToken);
                 return el;
+            }
         }
         return null;
     }
@@ -466,11 +476,17 @@ public class HtmlTreeBuilder extends TreeBuilder {
         queue.set(i, in);
     }
 
-    void resetInsertionMode() {
+    /**
+     * Reset the insertion mode, by searching up the stack for an appropriate insertion mode. The stack search depth
+     * is limited to {@link #maxQueueDepth}.
+     * @return true if the insertion mode was actually changed.
+     */
+    boolean resetInsertionMode() {
         // https://html.spec.whatwg.org/multipage/parsing.html#the-insertion-mode
         boolean last = false;
         final int bottom = stack.size() - 1;
         final int upper = bottom >= maxQueueDepth ? bottom - maxQueueDepth : 0;
+        final HtmlTreeBuilderState origState = this.state;
 
         if (stack.size() == 0) { // nothing left of stack, just get to body
             transition(HtmlTreeBuilderState.InBody);
@@ -539,6 +555,15 @@ public class HtmlTreeBuilder extends TreeBuilder {
                 break;
             }
         }
+        return state != origState;
+    }
+
+    /** Places the body back onto the stack and moves to InBody, for cases in AfterBody / AfterAfterBody when more content comes */
+    void resetBody() {
+        if (!onStack("body")) {
+            stack.add(doc.body());
+        }
+        transition(HtmlTreeBuilderState.InBody);
     }
 
     // todo: tidy up in specific scope methods
@@ -724,7 +749,10 @@ public class HtmlTreeBuilder extends TreeBuilder {
 
     void checkActiveFormattingElements(Element in){
         int numSeen = 0;
-        for (int pos = formattingElements.size() -1; pos >= 0; pos--) {
+        final int size = formattingElements.size() -1;
+        int ceil = size - maxUsedFormattingElements; if (ceil <0) ceil = 0;
+
+        for (int pos = size; pos >= ceil; pos--) {
             Element el = formattingElements.get(pos);
             if (el == null) // marker
                 break;
@@ -748,6 +776,8 @@ public class HtmlTreeBuilder extends TreeBuilder {
     }
 
     void reconstructFormattingElements() {
+        if (stack.size() > maxQueueDepth)
+            return;
         Element last = lastFormattingElement();
         if (last == null || onStack(last))
             return;
@@ -773,10 +803,8 @@ public class HtmlTreeBuilder extends TreeBuilder {
 
             // 8. create new element from element, 9 insert into current node, onto stack
             skip = false; // can only skip increment from 4.
-            Element newEl = insertStartTag(entry.normalName()); // todo: avoid fostering here?
-            // newEl.namespace(entry.namespace()); // todo: namespaces
-            if (entry.attributesSize() > 0)
-                newEl.attributes().addAll(entry.attributes());
+            Element newEl = new Element(tagFor(entry.normalName(), settings), null, entry.attributes().clone());
+            insert(newEl);
 
             // 10. replace entry with new entry
             formattingElements.set(pos, newEl);

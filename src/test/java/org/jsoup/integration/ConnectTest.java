@@ -12,7 +12,6 @@ import org.jsoup.nodes.FormElement;
 import org.jsoup.parser.HtmlTreeBuilder;
 import org.jsoup.parser.Parser;
 import org.jsoup.parser.XmlTreeBuilder;
-import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -39,11 +38,6 @@ public class ConnectTest {
     public static void setUp() {
         TestServer.start();
         echoUrl = EchoServlet.Url;
-    }
-
-    @AfterAll
-    public static void tearDown() {
-        TestServer.stop();
     }
 
     @Test
@@ -517,15 +511,12 @@ public class ConnectTest {
     @Test
     public void handlesUnknownEscapesAcrossBuffer() throws IOException {
         String localPath = "/htmltests/escapes-across-buffer.html";
-        String url =
-            "https://gist.githubusercontent.com/krystiangorecki/d3bad50ef5615f06b077438607423533/raw/71adfdf81121282ea936510ed6cfe440adeb2d83/JsoupIssue1218.html";
         String localUrl = FileServlet.urlTo(localPath);
 
-        Document docFromGithub = Jsoup.connect(url).get(); // different chunks meant GH would error but local not...
         Document docFromLocalServer = Jsoup.connect(localUrl).get();
         Document docFromFileRead = Jsoup.parse(ParseTest.getFile(localPath), "UTF-8");
 
-        String text = docFromGithub.body().text();
+        String text = docFromLocalServer.body().text();
         assertEquals(14766, text.length());
         assertEquals(text, docFromLocalServer.body().text());
         assertEquals(text, docFromFileRead.body().text());
@@ -655,7 +646,7 @@ public class ConnectTest {
         Connection.Response largeRes = Jsoup.connect(url).maxBodySize(300 * 1024).execute(); // does not crop
         Connection.Response unlimitedRes = Jsoup.connect(url).maxBodySize(0).execute();
 
-        int actualDocText = 269541;
+        int actualDocText = 269535;
         assertEquals(actualDocText, defaultRes.parse().text().length());
         assertEquals(49165, smallRes.parse().text().length());
         assertEquals(196577, mediumRes.parse().text().length());
@@ -670,5 +661,25 @@ public class ConnectTest {
         Document doc2 = con.get();
         assertEquals("Large HTML", doc1.title());
         assertEquals("Large HTML", doc2.title());
+    }
+
+    @Test
+    public void maxBodySizeInReadToByteBuffer() throws IOException {
+        // https://github.com/jhy/jsoup/issues/1774
+        // when calling readToByteBuffer, contents were not buffered up
+        String url = FileServlet.urlTo("/htmltests/large.html"); // 280 K
+
+        Connection.Response defaultRes = Jsoup.connect(url).execute();
+        Connection.Response smallRes = Jsoup.connect(url).maxBodySize(50 * 1024).execute(); // crops
+        Connection.Response mediumRes = Jsoup.connect(url).maxBodySize(200 * 1024).execute(); // crops
+        Connection.Response largeRes = Jsoup.connect(url).maxBodySize(300 * 1024).execute(); // does not crop
+        Connection.Response unlimitedRes = Jsoup.connect(url).maxBodySize(0).execute();
+
+        int actualDocText = 280735;
+        assertEquals(actualDocText, defaultRes.body().length());
+        assertEquals(50 * 1024, smallRes.body().length());
+        assertEquals(200 * 1024, mediumRes.body().length());
+        assertEquals(actualDocText, largeRes.body().length());
+        assertEquals(actualDocText, unlimitedRes.body().length());
     }
 }

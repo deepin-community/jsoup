@@ -191,6 +191,31 @@ public class W3CDomTest {
     }
 
     @Test
+    public void htmlInputDocMaintainsHtmlAttributeNames() {
+        String html = "<!DOCTYPE html><html><head></head><body><p hành=\"1\" hình=\"2\">unicode attr names</p></body></html>";
+        org.jsoup.nodes.Document jsoupDoc;
+        jsoupDoc = Jsoup.parse(html);
+
+        Document w3Doc = W3CDom.convert(jsoupDoc);
+        String out = W3CDom.asString(w3Doc, W3CDom.OutputHtml());
+        String expected = "<!DOCTYPE html SYSTEM \"about:legacy-compat\"><html><head><META http-equiv=\"Content-Type\" content=\"text/html; charset=UTF-8\"></head><body><p hành=\"1\" hình=\"2\">unicode attr names</p></body></html>";
+        assertEquals(expected, TextUtil.stripNewlines(out));
+    }
+
+    @Test
+    public void xmlInputDocMaintainsHtmlAttributeNames() {
+        String html = "<!DOCTYPE html><html><head></head><body><p hành=\"1\" hình=\"2\">unicode attr names coerced</p></body></html>";
+        org.jsoup.nodes.Document jsoupDoc;
+        jsoupDoc = Jsoup.parse(html);
+        jsoupDoc.outputSettings().syntax(org.jsoup.nodes.Document.OutputSettings.Syntax.xml);
+
+        Document w3Doc = W3CDom.convert(jsoupDoc);
+        String out = W3CDom.asString(w3Doc, W3CDom.OutputHtml());
+        String expected = "<!DOCTYPE html SYSTEM \"about:legacy-compat\"><html><head><META http-equiv=\"Content-Type\" content=\"text/html; charset=UTF-8\"></head><body><p hnh=\"2\">unicode attr names coerced</p></body></html>";
+        assertEquals(expected, TextUtil.stripNewlines(out));
+    }
+
+    @Test
     public void handlesInvalidTagAsText() {
         org.jsoup.nodes.Document jsoup = Jsoup.parse("<インセンティブで高収入！>Text <p>More</p>");
 
@@ -253,6 +278,20 @@ public class W3CDomTest {
         assertNull(nodeList);
     }
 
+    @Test
+    void canDisableNamespaces() throws XPathExpressionException {
+        W3CDom w3c = new W3CDom();
+        assertTrue(w3c.namespaceAware());
+
+        w3c.namespaceAware(false);
+        assertFalse(w3c.namespaceAware());
+
+        String html = "<html xmlns='http://www.w3.org/1999/xhtml'><body id='One'><div>hello</div></body></html>";
+        Document dom = w3c.fromJsoup(Jsoup.parse(html));
+        NodeList nodeList = xpath(dom, "//body");// no ns, so needs no prefix
+        assertEquals("div", nodeList.item(0).getLocalName());
+    }
+
     private NodeList xpath(Document w3cDoc, String query) throws XPathExpressionException {
         XPathExpression xpath = XPathFactory.newInstance().newXPath().compile(query);
         return ((NodeList) xpath.evaluate(w3cDoc, XPathConstants.NODE));
@@ -303,7 +342,7 @@ public class W3CDomTest {
         Element jDiv = jdoc.selectFirst("div");
         assertNotNull(jDiv);
         Document doc = w3CDom.fromJsoup(jDiv);
-        Node div = doc.getFirstChild();
+        Node div = w3CDom.contextNode(doc);
 
         assertEquals("div", div.getLocalName());
         assertEquals(jDiv, div.getUserData(W3CDom.SourceProperty));
