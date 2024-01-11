@@ -1,3 +1,29 @@
+jsoup (1.15.3-1) unstable; urgency=high
+
+  * Team upload.
+  * New upstream version 1.15.3.
+    - Fix CVE-2022-36033:
+      Jsoup may incorrectly sanitize HTML including Javascript which could
+      allow XSS attacks. (Closes: #1018931)
+      Thanks to Salvatore Bonaccorso for the report.
+
+ -- Markus Koschany <apo@debian.org>  Sat, 03 Sep 2022 01:03:14 +0200
+
+jsoup (1.15.2-1) unstable; urgency=medium
+
+  * Team upload.
+  * New upstream version 1.15.2.
+
+ -- Markus Koschany <apo@debian.org>  Tue, 23 Aug 2022 12:54:45 +0200
+
+jsoup (1.15.1-1) unstable; urgency=medium
+
+  * Team upload.
+  * New upstream version 1.15.1.
+  * Declare compliance with Debian Policy 4.6.1.
+
+ -- Markus Koschany <apo@debian.org>  Mon, 23 May 2022 23:40:41 +0200
+
 jsoup (1.14.3-1) unstable; urgency=medium
 
   * Team upload.

@@ -2,6 +2,7 @@ package org.jsoup.nodes;
 
 import org.jsoup.SerializationException;
 import org.jsoup.helper.Validate;
+import org.jsoup.internal.Normalizer;
 import org.jsoup.internal.StringUtil;
 import org.jsoup.nodes.Document.OutputSettings.Syntax;
 
@@ -55,6 +56,7 @@ public class Attribute implements Map.Entry<String, String>, Cloneable  {
      Get the attribute key.
      @return the attribute key
      */
+    @Override
     public String getKey() {
         return key;
     }
@@ -79,6 +81,7 @@ public class Attribute implements Map.Entry<String, String>, Cloneable  {
      Get the attribute value. Will return an empty string if the value is not set.
      @return the attribute value
      */
+    @Override
     public String getValue() {
         return Attributes.checkNotNull(val);
     }
@@ -139,7 +142,7 @@ public class Attribute implements Map.Entry<String, String>, Cloneable  {
         accum.append(key);
         if (!shouldCollapseAttribute(key, val, out)) {
             accum.append("=\"");
-            Entities.escape(accum, Attributes.checkNotNull(val) , out, true, false, false);
+            Entities.escape(accum, Attributes.checkNotNull(val) , out, true, false, false, false);
             accum.append('"');
         }
     }
@@ -211,7 +214,7 @@ public class Attribute implements Map.Entry<String, String>, Cloneable  {
      * Checks if this attribute name is defined as a boolean attribute in HTML5
      */
     public static boolean isBooleanAttribute(final String key) {
-        return Arrays.binarySearch(booleanAttributes, key) >= 0;
+        return Arrays.binarySearch(booleanAttributes, Normalizer.lowerCase(key)) >= 0;
     }
 
     @Override

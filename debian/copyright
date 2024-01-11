@@ -12,14 +12,14 @@ Files-Excluded: src/test/resources/htmltests/baidu-cn-home.html
                 src/test/resources/htmltests/yahoo-jp.html
 
 Files: *
-Copyright: 2009-2021, Jonathan Hedley
+Copyright: 2009-2022, Jonathan Hedley
 License: MIT
 
 Files: debian/*
 Copyright: 2011, Torsten Werner <twerner@debian.org>
            2014-2016, Debian Java Maintainers <pkg-java-maintainers@lists.alioth.debian.org>
            2019, Mechtilde Stehmann <mechtilde@debian.org>
-           2018-2021, Markus Koschany <apo@debian.org>
+           2018-2022, Markus Koschany <apo@debian.org>
 License: MIT
 
 License: MIT
